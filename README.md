@@ -48,3 +48,7 @@ struct DESKTOPCAPTUREPARAMS
     bool Pause = false;
 };
 ```
+Where:
+
+* HasVideo = 1 -> You are capturing video. If this is set, the output file must be an MP4 regardless of if you have audio or not.
+* HasAudio = 1 -> You are capturing audio. If this is set and you do not have a video, the output file must be an MP3 or FLAC. 
