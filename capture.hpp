@@ -490,7 +490,7 @@ inline void EnumVistaMixers()
     CoCreateInstance(__uuidof(MMDeviceEnumerator), NULL, CLSCTX_INPROC_SERVER, __uuidof(IMMDeviceEnumerator), (LPVOID*)&deviceEnumerator);
     if (deviceEnumerator)
     {
-        CComPtr < IMMDeviceCollection> e = 0;
+        CComPtr <IMMDeviceCollection> e = 0;
 
         // Capture
         deviceEnumerator->EnumAudioEndpoints(eCapture, DEVICE_STATEMASK_ALL, &e);
