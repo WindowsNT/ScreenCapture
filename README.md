@@ -1,5 +1,7 @@
 # ScreenCapture single header library for Windows
 
+Article: https://www.codeproject.com/Articles/5256890/ScreenCapture-Single-header-DirectX-library
+
 Features:
 * DirectX hardware screen capture and encoding
 * Audio capture and mixing, multiple audio sources, can capture from speakers
