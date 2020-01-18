@@ -1,5 +1,11 @@
 # ScreenCapture single header library for Windows
 
+Features:
+* DirectX hardware screen capture and encoding
+* Audio capture and mixing, multiple audio sources, can capture from speakers
+* H264/H265/VP80/VP90/MP3/FLAC support
+* Easy interface
+
 ```C++
 int wmain()
 {
