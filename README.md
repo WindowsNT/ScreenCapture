@@ -5,7 +5,7 @@ Article: https://www.codeproject.com/Articles/5256890/ScreenCapture-Single-heade
 Features:
 * DirectX hardware screen capture and encoding
 * Audio capture and mixing, multiple audio sources, can capture from speakers
-* H264/H265/VP80/VP90/MP3/FLAC support
+* H264/H265/VP80/VP90/MP3/FLAC/AAC support
 * Easy interface
 
 ```C++
@@ -59,14 +59,14 @@ struct DESKTOPCAPTUREPARAMS
 Where:
 
 * HasVideo = 1 -> You are capturing video. If this is set, the output file must be an MP4 or an ASF regardless of if you have audio or not.
-* HasAudio = 1 -> You are capturing audio. If this is set and you do not have a video, the output file must be an MP3 or FLAC. 
+* HasAudio = 1 -> You are capturing audio. If this is set and you do not have a video, the output file must be an MP3 or FLAC. For AAC, you must use MP4.
 * AudioFrom = a vector of which audio devices you want to capture. Each element is a tuple of the device unique ID (as returned by the enumeration, see VISTAMIXERS::EnumVistaMixers()) and a vector of the channels you want to record from.
 
 The library can also record from a playback device (like your speakers) in loopback. You can specify multiple sources of recording and the library will mix them all into the final audio stream.
 
 * VIDEO_ENCODING_FORMAT -> One of MFVideoFormat_H264, MFVideoFormat_HEVC, MFVideoFormat_VP90, MFVideoFormat_VP80.
-* AUDIO_ENCODING_FORMAT -> One of MFAudioFormat_MP3 or MFAudioFormat_FLAC. MP3 supports only 44100/48000 2 channel output.
-* f -> target file name (MP3/FLAC for audio only, MP4/ASF else)
+* AUDIO_ENCODING_FORMAT -> One of MFAudioFormat_MP3 or MFAudioFormat_FLAC or MFAudioFormat_AAC. MP3 and AAC support only 44100/48000 2 channel output.
+* f -> target file name (MP3/FLAC/AAC for audio only, MP4/ASF else)
 * fps -> Frames per second
 * NumThreads -> Threads for the video encoder, 0 default. Can be 0-16.
 * Qu -> If >= 0 and <= 0, Quality Vs Speed video factor
