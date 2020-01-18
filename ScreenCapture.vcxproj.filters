@@ -17,7 +17,7 @@
     <ClInclude Include="stdafx.h">
       <Filter>Code</Filter>
     </ClInclude>
-    <ClInclude Include="..\..\AED\capture.hpp">
+    <ClInclude Include="capture.hpp">
       <Filter>Code</Filter>
     </ClInclude>
   </ItemGroup>
