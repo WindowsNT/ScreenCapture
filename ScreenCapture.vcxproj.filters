@@ -1,0 +1,24 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup>
+    <ClCompile Include="main.cpp">
+      <Filter>Code</Filter>
+    </ClCompile>
+    <ClCompile Include="stdafx.cpp">
+      <Filter>Code</Filter>
+    </ClCompile>
+  </ItemGroup>
+  <ItemGroup>
+    <Filter Include="Code">
+      <UniqueIdentifier>{f39967f6-f5d7-4585-8037-d7a7d3d33408}</UniqueIdentifier>
+    </Filter>
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="stdafx.h">
+      <Filter>Code</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\AED\capture.hpp">
+      <Filter>Code</Filter>
+    </ClInclude>
+  </ItemGroup>
+</Project>
