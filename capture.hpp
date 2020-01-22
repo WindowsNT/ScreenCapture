@@ -1017,7 +1017,8 @@ int DesktopCapture(DESKTOPCAPTUREPARAMS& dp)
         }
     };
 
-    
+    EnumVistaMixers();
+
 
 
 /*    if (dp.HasAudio)
