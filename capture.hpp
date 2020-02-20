@@ -790,8 +790,10 @@ public:
             return 0;
 
         // Get DXGI adapter
+        HRESULT hr = 0;
+
         CComPtr<IDXGIAdapter> lDxgiAdapter;
-        auto hr = lDxgiDevice->GetParent(
+        hr = lDxgiDevice->GetParent(
             __uuidof(IDXGIAdapter),
             reinterpret_cast<void**>(&lDxgiAdapter));
 
@@ -843,6 +845,7 @@ public:
         desc.MipLevels = 1;
         desc.CPUAccessFlags = 0;
         desc.Usage = D3D11_USAGE_DEFAULT;
+        lGDIImage = 0;
         hr = device->CreateTexture2D(&desc, NULL, &lGDIImage);
         if (FAILED(hr))
             return 0;
@@ -862,6 +865,7 @@ public:
         desc.MipLevels = 1;
         desc.CPUAccessFlags = D3D11_CPU_ACCESS_READ | D3D11_CPU_ACCESS_WRITE;
         desc.Usage = D3D11_USAGE_STAGING;
+        lDestImage = 0;
         hr = device->CreateTexture2D(&desc, NULL, &lDestImage);
         if (FAILED(hr))
             return 0;
@@ -1086,7 +1090,6 @@ int DesktopCapture(DESKTOPCAPTUREPARAMS& dp)
     CComPtr<IMMDeviceEnumerator> deviceEnumerator = 0;
     if(dp.HasAudio)
         hr = CoCreateInstance(__uuidof(MMDeviceEnumerator), NULL, CLSCTX_INPROC_SERVER, __uuidof(IMMDeviceEnumerator), (LPVOID*)&deviceEnumerator);
-
 
     CAPTURE cap;
     int wi = 0, he = 0;
@@ -1660,6 +1663,23 @@ int DesktopCapture(DESKTOPCAPTUREPARAMS& dp)
                 &lDesktopResource);
             if (hr == DXGI_ERROR_WAIT_TIMEOUT)
                 hr = S_OK;
+            if (hr == DXGI_ERROR_ACCESS_LOST)
+            {
+                cap.lDeskDupl = 0;
+                bool C = false;
+                for (int i = 0; i < 10; i++)
+                {
+                    if (cap.Prepare(dp.nOutput))
+                    {
+                        C = true;
+                        break;
+                    }
+                    Sleep(250);
+                }
+                if (!C)
+                    break;
+                hr = S_OK;
+            }
             if (FAILED(hr))
                 break;
 
