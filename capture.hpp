@@ -892,6 +892,8 @@ struct DESKTOPCAPTUREPARAMS
     GUID VIDEO_ENCODING_FORMAT = MFVideoFormat_H264;
     GUID AUDIO_ENCODING_FORMAT = MFAudioFormat_MP3;
     std::wstring f;
+    std::function<HRESULT(const BYTE* d, size_t sz)> Streamer;
+    std::function<void(IMFAttributes* a)> PrepareAttributes;
     int fps = 25;
     int NumThreads = 0;
     int Qu = -1;
@@ -912,6 +914,245 @@ struct DESKTOPCAPTUREPARAMS
     bool MustEnd = false;
     bool Pause = false;
 };
+
+
+struct VectorStreamX2 : public IMFByteStream
+{
+    ULONG r = 1;
+    std::vector<char> d;
+    size_t p = 0;
+
+    // IUnknown
+    virtual HRESULT STDMETHODCALLTYPE QueryInterface(
+        /* [in] */ REFIID riid,
+        /* [iid_is][out] */ _COM_Outptr_ void __RPC_FAR* __RPC_FAR* ppvObject)
+    {
+        if (riid == __uuidof(IUnknown) || riid == __uuidof(IMFByteStream))
+        {
+            *ppvObject = (IStream*)this;
+            r++;
+            return S_OK;
+        }
+        return E_NOINTERFACE;
+    }
+
+    virtual ULONG STDMETHODCALLTYPE AddRef(void)
+    {
+        return ++r;
+    }
+
+    virtual ULONG STDMETHODCALLTYPE Release(void)
+    {
+        return --r;
+    }
+
+    HRESULT __stdcall  BeginRead(
+        BYTE* pb,
+        ULONG            cb,
+        IMFAsyncCallback* pCallback,
+        IUnknown* punkState
+    )
+    {
+        ULONG pcb = 0;
+        Read(pb, cb, &pcb);
+        NextCB = pcb;
+        CComPtr<IMFAsyncResult> ar;
+        MFCreateAsyncResult(0, pCallback, punkState, &ar);
+        pCallback->Invoke(ar);
+        return S_OK;
+    }
+
+    ULONG NextCB = 0;
+    HRESULT __stdcall   BeginWrite(
+        const BYTE* pb,
+        ULONG            cb,
+        IMFAsyncCallback* pCallback,
+        IUnknown* punkState
+    )
+    {
+        ULONG pcb = 0;
+        Write(pb, cb, &pcb);
+        NextCB = pcb;
+        CComPtr<IMFAsyncResult> ar;
+        MFCreateAsyncResult(0, pCallback, punkState, &ar);
+        pCallback->Invoke(ar);
+        return S_OK;
+    }
+
+    HRESULT __stdcall   Close(
+
+    )
+    {
+        return S_OK;
+    }
+
+    HRESULT __stdcall  EndRead(
+        IMFAsyncResult* pResult,
+        ULONG* pcbRead
+    )
+    {
+        if (!pcbRead)
+            return E_POINTER;
+        *pcbRead = NextCB;
+        return S_OK;
+    }
+
+    HRESULT __stdcall EndWrite(
+        IMFAsyncResult* pResult,
+        ULONG* pcbWritten
+    )
+    {
+        if (!pcbWritten)
+            return E_POINTER;
+        *pcbWritten = NextCB;
+        return S_OK;
+    }
+
+    HRESULT __stdcall  Flush()
+    {
+        return S_OK;
+    }
+
+    HRESULT __stdcall   GetCapabilities(
+        DWORD* pdwCapabilities
+    )
+    {
+        if (!pdwCapabilities)
+            return E_POINTER;
+        *pdwCapabilities = MFBYTESTREAM_IS_READABLE | MFBYTESTREAM_IS_WRITABLE | MFBYTESTREAM_IS_SEEKABLE;
+        return S_OK;
+    }
+
+    HRESULT __stdcall  GetCurrentPosition(
+        QWORD* pqwPosition
+    )
+    {
+        if (!pqwPosition)
+            return E_POINTER;
+        *pqwPosition = p;
+        return S_OK;
+    }
+
+    HRESULT __stdcall  GetLength(
+        QWORD* q
+    )
+    {
+        if (!q)
+            return E_POINTER;
+        *q = d.size();
+        return S_OK;
+    }
+
+    HRESULT __stdcall  IsEndOfStream(
+        BOOL* q
+    )
+    {
+        if (!q)
+            return E_POINTER;
+        *q = FALSE;
+        if (p == d.size())
+            *q = TRUE;
+        return S_OK;
+    }
+
+    HRESULT __stdcall  Read(
+        BYTE* pv,
+        ULONG cb,
+        ULONG* pcbRead
+    )
+    {
+        auto av = d.size() - p;
+        if (cb < av)
+            av = cb;
+        memcpy(pv, d.data() + p, av);
+        p += av;
+        if (pcbRead)
+            *pcbRead = (ULONG)av;
+        if (av < cb)
+            return S_FALSE;
+        return S_OK;
+    }
+
+    std::function<HRESULT(const BYTE*, size_t)> func;
+
+    HRESULT __stdcall  Write(
+        const BYTE* pv,
+        ULONG      cb,
+        ULONG* pcbWritten
+    )
+    {
+        if (d.size() < (p + cb))
+        {
+            auto exc = (p + cb) - d.size();
+            d.resize(d.size() + exc);
+        }
+        memcpy(d.data() + p, pv, cb);
+
+        if (func)
+        {
+          auto hr = func(pv, cb);
+          if (FAILED(hr))
+              return hr;
+        }
+
+
+        p += cb;
+        if (pcbWritten)
+            *pcbWritten = cb;
+        return S_OK;
+    }
+
+    HRESULT __stdcall  SetLength(
+        QWORD qwLength
+    )
+
+    {
+        d.resize(qwLength);
+        if (p >= qwLength)
+            p = qwLength;
+        return S_OK;
+    }
+
+    HRESULT __stdcall  SetCurrentPosition(
+        QWORD q
+    )
+    {
+        if (q > d.size())
+            return E_FAIL;
+        p = q;
+        return S_OK;
+
+    }
+
+
+    HRESULT __stdcall Seek(
+        MFBYTESTREAM_SEEK_ORIGIN dwOrigin,
+        LONGLONG                 llSeekOffset,
+        DWORD                    dwSeekFlags,
+        QWORD* pqwCurrentPosition
+    )
+    {
+        LARGE_INTEGER lo = { 0 };
+        if (dwOrigin == msoBegin)
+        {
+            p = llSeekOffset;
+        }
+        if (dwOrigin == msoCurrent)
+        {
+            p += llSeekOffset;
+        }
+        if (p >= d.size())
+            p = d.size();
+        if (pqwCurrentPosition)
+            *pqwCurrentPosition = p;
+
+        return S_OK;
+    }
+
+
+};
+
+
 
 int DesktopCapture(DESKTOPCAPTUREPARAMS& dp)
 {
@@ -1112,8 +1353,21 @@ int DesktopCapture(DESKTOPCAPTUREPARAMS& dp)
     MFCreateAttributes(&attrs, 0);
     attrs->SetUINT32(MF_READWRITE_ENABLE_HARDWARE_TRANSFORMS, true);
 
+    VectorStreamX2 bs;
+    bs.func = dp.Streamer;
     CComPtr<IMFSinkWriter> pSinkWriter;
-    hr = MFCreateSinkWriterFromURL(dp.f.c_str(), NULL, attrs, &pSinkWriter);
+    if (dp.f.empty())
+    {
+        if (dp.HasVideo)
+            attrs->SetGUID(MF_TRANSCODE_CONTAINERTYPE, MFTranscodeContainerType_MPEG4);
+        else
+            attrs->SetGUID(MF_TRANSCODE_CONTAINERTYPE, MFTranscodeContainerType_MP3);
+        if (dp.PrepareAttributes)
+            dp.PrepareAttributes(attrs);
+        hr = MFCreateSinkWriterFromURL(NULL, &bs, attrs, &pSinkWriter);
+    }
+    else
+        hr = MFCreateSinkWriterFromURL(dp.f.c_str(), NULL, attrs, &pSinkWriter);
     if (FAILED(hr)) return -3;
 
 
@@ -1827,6 +2081,8 @@ int DesktopCapture(DESKTOPCAPTUREPARAMS& dp)
     }
 
     hr = pSinkWriter->Finalize();
+    if (FAILED(hr))
+        return -14;
 	return 0;
 }
 
