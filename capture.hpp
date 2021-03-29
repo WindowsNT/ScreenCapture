@@ -892,8 +892,9 @@ struct DESKTOPCAPTUREPARAMS
     GUID VIDEO_ENCODING_FORMAT = MFVideoFormat_H264;
     GUID AUDIO_ENCODING_FORMAT = MFAudioFormat_MP3;
     std::wstring f;
-    std::function<HRESULT(const BYTE* d, size_t sz)> Streamer;
-    std::function<HRESULT(const BYTE* d, size_t sz)> Framer;
+    void* cb = 0;
+    std::function<HRESULT(const BYTE* d, size_t sz,void* cb)> Streamer;
+    std::function<HRESULT(const BYTE* d, size_t sz,void* cb)> Framer;
     std::function<void(IMFAttributes* a)> PrepareAttributes;
     int fps = 25;
     int NumThreads = 0;
@@ -1074,8 +1075,8 @@ struct VectorStreamX2 : public IMFByteStream
         return S_OK;
     }
 
-    std::function<HRESULT(const BYTE*, size_t)> func;
-
+    std::function<HRESULT(const BYTE*, size_t,void* cb)> func;
+    void* cbx = 0;
     HRESULT __stdcall  Write(
         const BYTE* pv,
         ULONG      cb,
@@ -1091,7 +1092,7 @@ struct VectorStreamX2 : public IMFByteStream
 
         if (func)
         {
-          auto hr = func(pv, cb);
+          auto hr = func(pv, cb,cbx);
           if (FAILED(hr))
               return hr;
         }
@@ -1962,7 +1963,7 @@ int DesktopCapture(DESKTOPCAPTUREPARAMS& dp)
 
             memcpy(pData, cap.buf.data(), min(cap.buf.size(),VideoBufferSize));
             if (dp.Framer)
-                hrf = dp.Framer(cap.buf.data(), min(cap.buf.size(),VideoBufferSize));
+                hrf = dp.Framer(cap.buf.data(), min(cap.buf.size(),VideoBufferSize),dp.cb);
 
             hr = pVideoBuffer->Unlock();
             if (FAILED(hr)) break;

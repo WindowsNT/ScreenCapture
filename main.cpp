@@ -19,7 +19,7 @@ int wmain()
 	{
 		attrs->SetGUID(MF_TRANSCODE_CONTAINERTYPE, MFTranscodeContainerType_ASF);
 	};
-	dp.Streamer = [](const BYTE* b,size_t sz)
+	dp.Streamer = [](const BYTE* b,size_t sz,void* cb)
 	{
 		FILE* fp = 0;
 		_wfopen_s(&fp, L"capture.asf", L"a+b");
@@ -34,7 +34,7 @@ int wmain()
 	dp.f = L"";
 	dp.HasAudio = 0;
 	dp.HasVideo = 1;
-	dp.Framer = [](const BYTE* b, size_t sz)
+	dp.Framer = [](const BYTE* b, size_t sz,void* cb)
 	{
 		if (sz)
 			return S_OK;
