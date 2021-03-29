@@ -35,6 +35,10 @@ struct DESKTOPCAPTUREPARAMS
     GUID VIDEO_ENCODING_FORMAT = MFVideoFormat_H264;
     GUID AUDIO_ENCODING_FORMAT = MFAudioFormat_MP3;
     std::wstring f;
+    std::function<HRESULT(const BYTE* d, size_t sz)> Streamer;
+    std::function<HRESULT(const BYTE* d, size_t sz)> Framer;
+    std::function<void(IMFAttributes* a)> PrepareAttributes;
+
     int fps = 25;
     int NumThreads = 0;
     int Qu = -1;
@@ -83,6 +87,10 @@ The library can also record from a playback device (like your speakers) in loopb
 * EndMS -> If not 0, the library stops when EndMs milliseconds have been captured. Else you have to stop the library by setting "MustEnd" to true
 * MustEnd -> Set to true for the library to stop capturing
 * Pause -> If true, capture is paused
+
+
+If you add the Streamer callback, f can be empty. In this case, you have a MP4 or ASF stream in your callback.
+If you add the Framer callback, the library captures a screenshot (DWORD array of RGBA to the callback) until the callback returns S_OK,in which the library returns.
 
 
 
