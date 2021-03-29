@@ -893,6 +893,7 @@ struct DESKTOPCAPTUREPARAMS
     GUID AUDIO_ENCODING_FORMAT = MFAudioFormat_MP3;
     std::wstring f;
     std::function<HRESULT(const BYTE* d, size_t sz)> Streamer;
+    std::function<HRESULT(const BYTE* d, size_t sz)> Framer;
     std::function<void(IMFAttributes* a)> PrepareAttributes;
     int fps = 25;
     int NumThreads = 0;
@@ -1358,13 +1359,20 @@ int DesktopCapture(DESKTOPCAPTUREPARAMS& dp)
     CComPtr<IMFSinkWriter> pSinkWriter;
     if (dp.f.empty())
     {
-        if (dp.HasVideo)
-            attrs->SetGUID(MF_TRANSCODE_CONTAINERTYPE, MFTranscodeContainerType_MPEG4);
+        if (dp.Framer)
+        {
+            hr = S_OK;
+        }
         else
-            attrs->SetGUID(MF_TRANSCODE_CONTAINERTYPE, MFTranscodeContainerType_MP3);
-        if (dp.PrepareAttributes)
-            dp.PrepareAttributes(attrs);
-        hr = MFCreateSinkWriterFromURL(NULL, &bs, attrs, &pSinkWriter);
+        {
+            if (dp.HasVideo)
+                attrs->SetGUID(MF_TRANSCODE_CONTAINERTYPE, MFTranscodeContainerType_MPEG4);
+            else
+                attrs->SetGUID(MF_TRANSCODE_CONTAINERTYPE, MFTranscodeContainerType_MP3);
+            if (dp.PrepareAttributes)
+                dp.PrepareAttributes(attrs);
+            hr = MFCreateSinkWriterFromURL(NULL, &bs, attrs, &pSinkWriter);
+        }
     }
     else
         hr = MFCreateSinkWriterFromURL(dp.f.c_str(), NULL, attrs, &pSinkWriter);
@@ -1374,7 +1382,7 @@ int DesktopCapture(DESKTOPCAPTUREPARAMS& dp)
     CComPtr<IMFMediaType> pMediaTypeOutVideo;
     DWORD OutVideoStreamIndex = 0;
     CComPtr<IMFMediaType> pMediaTypeVideoIn;
-    if (dp.HasVideo)
+    if (dp.HasVideo && !dp.Framer)
     {
         hr = MFCreateMediaType(&pMediaTypeOutVideo);
         if (FAILED(hr)) return -4;
@@ -1623,7 +1631,7 @@ int DesktopCapture(DESKTOPCAPTUREPARAMS& dp)
     if (!NV12)
         pMediaTypeVideoIn->SetGUID(MF_MT_SUBTYPE, MFVideoFormat_RGB32);
 
-    if (dp.HasVideo)
+    if (dp.HasVideo && !dp.Framer)
     {
         hr = pSinkWriter->SetInputMediaType(OutVideoStreamIndex, pMediaTypeVideoIn, NULL);
         if (FAILED(hr)) return -10;
@@ -1692,7 +1700,8 @@ int DesktopCapture(DESKTOPCAPTUREPARAMS& dp)
     }
 
 
-    hr = pSinkWriter->BeginWriting();
+    if (pSinkWriter)
+        hr = pSinkWriter->BeginWriting();
     if (FAILED(hr)) return -13;
 
     const LONG cbWidth = 4 * wi;
@@ -1716,7 +1725,7 @@ int DesktopCapture(DESKTOPCAPTUREPARAMS& dp)
 #endif
     for (;;)
     {
-        if (!dp.HasAudio)
+        if (!dp.HasAudio && !dp.Framer)
             Sleep((DWORD)msloop);
         if (dp.MustEnd)
             break;
@@ -1909,6 +1918,7 @@ int DesktopCapture(DESKTOPCAPTUREPARAMS& dp)
 
         // Get new frame
         BYTE* pData = NULL;
+        HRESULT hrf = S_FALSE;
         if (dp.HasVideo)
         {
             hr = cap.lDeskDupl->AcquireNextFrame(
@@ -1950,7 +1960,9 @@ int DesktopCapture(DESKTOPCAPTUREPARAMS& dp)
             if (FAILED(hr))
                 break;
 
-            memcpy(pData, cap.buf.data(), VideoBufferSize);
+            memcpy(pData, cap.buf.data(), min(cap.buf.size(),VideoBufferSize));
+            if (dp.Framer)
+                hrf = dp.Framer(cap.buf.data(), min(cap.buf.size(),VideoBufferSize));
 
             hr = pVideoBuffer->Unlock();
             if (FAILED(hr)) break;
@@ -1990,7 +2002,7 @@ int DesktopCapture(DESKTOPCAPTUREPARAMS& dp)
                     pVideoSample = s2;
             }
 
-            if (pVideoSample && dp.HasVideo)
+            if (pVideoSample && dp.HasVideo && !dp.Framer)
             {
                 hr = pVideoSample->SetSampleTime(rtV);
                 if (FAILED(hr)) break;
@@ -2071,6 +2083,9 @@ int DesktopCapture(DESKTOPCAPTUREPARAMS& dp)
         auto rvx = rtV / 10000;
         if (dp.EndMS > 0 && rvx >= dp.EndMS)
             break;
+
+        if (dp.Framer && hrf == S_OK)
+            break;
     }
 
     // Audio off
@@ -2080,7 +2095,8 @@ int DesktopCapture(DESKTOPCAPTUREPARAMS& dp)
             a6->ac->Stop();
     }
 
-    hr = pSinkWriter->Finalize();
+    if (pSinkWriter)
+        hr = pSinkWriter->Finalize();
     if (FAILED(hr))
         return -14;
 	return 0;
