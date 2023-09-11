@@ -1712,6 +1712,8 @@ int DesktopCapture(DESKTOPCAPTUREPARAMS& dp)
 
     unsigned long long rtA = 0;
     unsigned long long rtV = 0;
+    std::chrono::system_clock::time_point last_frame_time_point;
+    bool isFirstFrame = true;
 
     [[maybe_unused]] unsigned long long msloop = 1000 / dp.fps;
 
@@ -1948,8 +1950,27 @@ int DesktopCapture(DESKTOPCAPTUREPARAMS& dp)
             if (FAILED(hr))
                 break;
 
+            // take a time stamp here
+            // Get the current time point
             if (lDesktopResource && !cap.Get(lDesktopResource, dp.Cursor, dp.rx.right && dp.rx.bottom ? &dp.rx : 0))
                 break;
+
+            if (isFirstFrame)
+            {
+                isFirstFrame = false;
+                rtV = 0;
+                last_frame_time_point = std::chrono::system_clock::now();
+            }
+            else
+            {
+                // Time stamp of current frame.
+                // Calculate the dt with last frame. and set to the frame property.
+                auto current_frameTimePoint = std::chrono::system_clock::now();
+                auto frameDuration = current_frameTimePoint - last_frame_time_point;
+                last_frame_time_point = current_frameTimePoint;
+                ThisDurV = frameDuration.count();
+                rtV += ThisDurV;
+            }
 
             if (!pVideoBuffer)
             {
@@ -2021,8 +2042,6 @@ int DesktopCapture(DESKTOPCAPTUREPARAMS& dp)
                 OutputDebugString(L"OK\r\n");
 #endif
                 if (FAILED(hr)) break;
-
-                rtV += ThisDurV;
             }
         }
 
