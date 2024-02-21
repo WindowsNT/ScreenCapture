@@ -186,7 +186,7 @@ public:
 };
 
 template <typename T>
-T Peak(T* d, size_t s)
+inline T Peak(T* d, size_t s)
 {
     T mm = 0;
     for (size_t i = 0; i < s; i++)
@@ -310,7 +310,7 @@ public:
 };
 
 
-HRESULT MFTrs(DWORD, DWORD iid, DWORD ood, CComPtr<IMFTransform> trs, CComPtr<IMFSample> s, IMFSample** sx)
+inline HRESULT MFTrs(DWORD, DWORD iid, DWORD ood, CComPtr<IMFTransform> trs, CComPtr<IMFSample> s, IMFSample** sx)
 {
     if (!trs)
         return E_FAIL;
@@ -479,10 +479,8 @@ struct VISTAMIXER
 };
 
 
-inline std::vector<VISTAMIXER> vistamixers;
 DEFINE_PROPERTYKEY(PKEY_Device_FriendlyName, 0xa45c254e, 0xdf1c, 0x4efd, 0x80, 0x20, 0x67, 0xd1, 0x46, 0xa8, 0x50, 0xe0, 14);    // DEVPROP_TYPE_STRING
-inline void EnumVistaMixers()
-{
+inline void EnumVistaMixers(std::vector<VISTAMIXER>& vistamixers) {
     vistamixers.clear();
 
     // Windows Vista+ Mixers as well
@@ -1156,8 +1154,7 @@ struct VectorStreamX2 : public IMFByteStream
 
 
 
-int DesktopCapture(DESKTOPCAPTUREPARAMS& dp)
-{
+inline int DesktopCapture(DESKTOPCAPTUREPARAMS& dp) {
     HRESULT hr = S_OK;
     struct AUDIOIN
     {
@@ -1263,8 +1260,8 @@ int DesktopCapture(DESKTOPCAPTUREPARAMS& dp)
             CapturingFin1 = true;
         }
     };
-
-    EnumVistaMixers();
+    std::vector<VISTAMIXER> vistamixers;
+    EnumVistaMixers(vistamixers);
 
 
 
