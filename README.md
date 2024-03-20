@@ -5,6 +5,7 @@ Article: https://www.codeproject.com/Articles/5256890/ScreenCapture-Single-heade
 Features:
 * DirectX hardware screen capture and encoding
 * Audio capture and mixing, multiple audio sources, can capture from speakers
+* HDR support
 * H264/H265/VP80/VP90/MP3/FLAC/AAC support
 * Easy interface
 
@@ -68,7 +69,7 @@ Where:
 
 The library can also record from a playback device (like your speakers) in loopback. You can specify multiple sources of recording and the library will mix them all into the final audio stream.
 
-* VIDEO_ENCODING_FORMAT -> One of MFVideoFormat_H264, MFVideoFormat_HEVC, MFVideoFormat_VP90, MFVideoFormat_VP80.
+* VIDEO_ENCODING_FORMAT -> One of MFVideoFormat_H264, MFVideoFormat_HEVC, MFVideoFormat_VP90, MFVideoFormat_VP80. If your display is HDR, use MFVideoFormat_HEVC._
 * AUDIO_ENCODING_FORMAT -> One of MFAudioFormat_MP3 or MFAudioFormat_FLAC or MFAudioFormat_AAC. MP3 and AAC support only 44100/48000 2 channel output.
 * f -> target file name (MP3/FLAC/AAC for audio only, MP4/ASF else)
 * fps -> Frames per second
@@ -79,7 +80,7 @@ The library can also record from a playback device (like your speakers) in loopb
 * NCH -> Audio output channels
 * SR -> Audio output sample rate
 * ABR -> Audio bitrate in Kbps for MP3
-* Cursor -> true to capture the cursor
+* Cursor -> true to capture the cursor. Ignored if HDR.
 * rx -> If not {0}, capture this specific rect only
 * hWnd -> If not {0}, capture this HWND only. If HWND is 0 and rx = {0}, the entire screen is captured
 * ad -> If not 0, specifies which adapter you want to capture if you have more than 1 adapter
@@ -90,7 +91,7 @@ The library can also record from a playback device (like your speakers) in loopb
 
 
 If you add the Streamer callback, f can be empty. In this case, you have a MP4 or ASF stream in your callback.
-If you add the Framer callback, the library captures a screenshot (DWORD array of RGBA to the callback) until the callback returns S_OK,in which the library returns.
+If you add the Framer callback, the library captures a screenshot (DWORD array of RGBA (or DXGI_FORMAT_R16G16B16A16_FLOAT for HDR) to the callback) until the callback returns S_OK,in which the library returns.
 
 
 

@@ -8,9 +8,9 @@ int wmain()
 	MFStartup(MF_VERSION);
 	std::cout << "Capturing screen for 10 seconds...";
 	DESKTOPCAPTUREPARAMS dp;
-
+	dp.Cursor = 0;
 	// To Video
-	dp.VIDEO_ENCODING_FORMAT = MFVideoFormat_H265;
+	dp.VIDEO_ENCODING_FORMAT = MFVideoFormat_HEVC;
 	dp.f = L"capture.mp4";
 
 	// To Stream
@@ -44,6 +44,7 @@ int wmain()
 
 	dp.EndMS = 10000;
 	DesktopCapture(dp);
+	ShellExecute(0, L"open", L"capture.mp4", 0, 0, SW_SHOWNORMAL);
 	std::cout << "Done.\r\n";
 	return 0;
 }

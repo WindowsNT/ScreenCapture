@@ -1,9 +1,21 @@
 #include <audiosessiontypes.h>
 #include <audioclient.h>
 #include <mmdeviceapi.h>
+#undef min
+#undef max
 #ifdef TURBO_PLAY_SC
 #include "..\\ca\\vistamixers.hpp"
 #else
+
+
+// {1884E6DC-2AE3-4499-A3D7-1A27E3B2AC39}
+inline static const GUID MyFakeFmt =
+{ 0x1884e6dc, 0x2ae3, 0x4499, { 0xa3, 0xd7, 0x1a, 0x27, 0xe3, 0xb2, 0xac, 0x39 } };
+
+// {7F478D2D-9EBF-4B9A-B2F3-83800263BB86}
+inline static const GUID MFVideoFormat_RGB10 =
+{ 0x7f478d2d, 0x9ebf, 0x4b9a, { 0xb2, 0xf3, 0x83, 0x80, 0x2, 0x63, 0xbb, 0x86 } };
+
 
 class AHANDLE
 {
@@ -186,7 +198,7 @@ public:
 };
 
 template <typename T>
-T Peak(T* d, size_t s)
+inline T Peak(T* d, size_t s)
 {
     T mm = 0;
     for (size_t i = 0; i < s; i++)
@@ -310,7 +322,7 @@ public:
 };
 
 
-HRESULT MFTrs(DWORD, DWORD iid, DWORD ood, CComPtr<IMFTransform> trs, CComPtr<IMFSample> s, IMFSample** sx)
+inline HRESULT MFTrs(DWORD, DWORD iid, DWORD ood, CComPtr<IMFTransform> trs, CComPtr<IMFSample> s, IMFSample** sx)
 {
     if (!trs)
         return E_FAIL;
@@ -479,9 +491,8 @@ struct VISTAMIXER
 };
 
 
-inline std::vector<VISTAMIXER> vistamixers;
 DEFINE_PROPERTYKEY(PKEY_Device_FriendlyName, 0xa45c254e, 0xdf1c, 0x4efd, 0x80, 0x20, 0x67, 0xd1, 0x46, 0xa8, 0x50, 0xe0, 14);    // DEVPROP_TYPE_STRING
-inline void EnumVistaMixers()
+inline void EnumVistaMixers(std::vector<VISTAMIXER>& vistamixers)
 {
     vistamixers.clear();
 
@@ -613,6 +624,7 @@ class CAPTURE
 {
 public:
 
+    DXGI_FORMAT InHDR = DXGI_FORMAT_UNKNOWN;
     HRESULT CreateDirect3DDevice(IDXGIAdapter1* g)
     {
         HRESULT hr = S_OK;
@@ -698,44 +710,54 @@ public:
             return 0;
         lDesktopResource = 0;
 
-        // Copy image into GDI drawing texture
-        context->CopyResource(lGDIImage, lAcquiredDesktopImage);
 
-        // Draw cursor image into GDI drawing texture
-        CComPtr<IDXGISurface1> lIDXGISurface1;
-
-        lIDXGISurface1 = lGDIImage;
-
-        if (!lIDXGISurface1)
-            return 0;
-
-        CURSORINFO lCursorInfo = { 0 };
-        lCursorInfo.cbSize = sizeof(lCursorInfo);
-        auto lBoolres = GetCursorInfo(&lCursorInfo);
-        if (lBoolres == TRUE)
+        if (InHDR != DXGI_FORMAT_UNKNOWN || Curs == 0)
         {
-            if (lCursorInfo.flags == CURSOR_SHOWING && Curs)
+            // No Cursor support
+            context->CopyResource(lDestImage, lAcquiredDesktopImage);
+        }
+        else
+        {
+            // Copy image into GDI drawing texture
+            context->CopyResource(lGDIImage, lAcquiredDesktopImage);
+
+            // Draw cursor image into GDI drawing texture
+            CComPtr<IDXGISurface1> lIDXGISurface1;
+
+            lIDXGISurface1 = lGDIImage;
+
+            if (!lIDXGISurface1)
+                return 0;
+
+            CURSORINFO lCursorInfo = { 0 };
+            lCursorInfo.cbSize = sizeof(lCursorInfo);
+            auto lBoolres = GetCursorInfo(&lCursorInfo);
+            if (lBoolres == TRUE)
             {
-                auto lCursorPosition = lCursorInfo.ptScreenPos;
-//                auto lCursorSize = lCursorInfo.cbSize;
-                HDC  lHDC;
-                lIDXGISurface1->GetDC(FALSE, &lHDC);
-                DrawIconEx(
-                    lHDC,
-                    lCursorPosition.x,
-                    lCursorPosition.y,
-                    lCursorInfo.hCursor,
-                    0,
-                    0,
-                    0,
-                    0,
-                    DI_NORMAL | DI_DEFAULTSIZE);
-                lIDXGISurface1->ReleaseDC(nullptr);
+                if (lCursorInfo.flags == CURSOR_SHOWING && Curs)
+                {
+                    auto lCursorPosition = lCursorInfo.ptScreenPos;
+                    //                auto lCursorSize = lCursorInfo.cbSize;
+                    HDC  lHDC;
+                    lIDXGISurface1->GetDC(FALSE, &lHDC);
+                    DrawIconEx(
+                        lHDC,
+                        lCursorPosition.x,
+                        lCursorPosition.y,
+                        lCursorInfo.hCursor,
+                        0,
+                        0,
+                        0,
+                        0,
+                        DI_NORMAL | DI_DEFAULTSIZE);
+                    lIDXGISurface1->ReleaseDC(nullptr);
+                }
             }
+
+            // Copy image into CPU access texture
+            context->CopyResource(lDestImage, lGDIImage);
         }
 
-        // Copy image into CPU access texture
-        context->CopyResource(lDestImage, lGDIImage);
 
         // Copy from CPU access texture to bitmap buffer
         D3D11_MAPPED_SUBRESOURCE resource;
@@ -744,26 +766,30 @@ public:
         if (FAILED(hr))
             return 0;
 
+        int multi = 4;
+        if (InHDR == DXGI_FORMAT_R16G16B16A16_FLOAT)
+            multi = 8; // 64-bit
+
         auto sz = lOutputDuplDesc.ModeDesc.Width
-            * lOutputDuplDesc.ModeDesc.Height * 4;
+            * lOutputDuplDesc.ModeDesc.Height * multi;
         auto sz2 = sz;
         buf.resize(sz);
         if (rcx)
         {
-            sz2 = (rcx->right - rcx->left) * (rcx->bottom - rcx->top) * 4;
+            sz2 = (rcx->right - rcx->left) * (rcx->bottom - rcx->top) * multi;
             buf.resize(sz2);
             sz = sz2;
         }
 
-        UINT lBmpRowPitch = lOutputDuplDesc.ModeDesc.Width * 4;
+        UINT lBmpRowPitch = lOutputDuplDesc.ModeDesc.Width * multi;
         if (rcx)
-            lBmpRowPitch = (rcx->right - rcx->left) * 4;
+            lBmpRowPitch = (rcx->right - rcx->left) * multi;
         UINT lRowPitch = std::min<UINT>(lBmpRowPitch, resource.RowPitch);
 
         BYTE* sptr = reinterpret_cast<BYTE*>(resource.pData);
         BYTE* dptr = buf.data() + sz - lBmpRowPitch;
         if (rcx)
-            sptr += rcx->left * 4;
+            sptr += rcx->left * multi;
         for (size_t h = 0; h < lOutputDuplDesc.ModeDesc.Height; ++h)
         {
             if (rcx && h < (size_t)rcx->top)
@@ -839,7 +865,13 @@ public:
         desc.Format = lOutputDuplDesc.ModeDesc.Format;
         desc.ArraySize = 1;
         desc.BindFlags = D3D11_BIND_FLAG::D3D11_BIND_RENDER_TARGET;
-        desc.MiscFlags = D3D11_RESOURCE_MISC_GDI_COMPATIBLE;
+        InHDR = DXGI_FORMAT_UNKNOWN;
+        if (desc.Format == DXGI_FORMAT_R16G16B16A16_FLOAT) // HDR, no GDI compatible
+        {
+            InHDR = desc.Format;
+        }
+        else
+            desc.MiscFlags = D3D11_RESOURCE_MISC_GDI_COMPATIBLE;
         desc.SampleDesc.Count = 1;
         desc.SampleDesc.Quality = 0;
         desc.MipLevels = 1;
@@ -847,6 +879,11 @@ public:
         desc.Usage = D3D11_USAGE_DEFAULT;
         lGDIImage = 0;
         hr = device->CreateTexture2D(&desc, NULL, &lGDIImage);
+        if (FAILED(hr))
+        {
+//            desc.MiscFlags = 0;
+  //          hr = device->CreateTexture2D(&desc, NULL, &lGDIImage);
+        }
         if (FAILED(hr))
             return 0;
 
@@ -876,6 +913,45 @@ public:
         return 1;
     }
 
+
+    CComPtr<IWICImagingFactory2> wbfact;
+    HRESULT Convert(void* f, int wi, int he,std::vector<DWORD>& out,GUID from = GUID_WICPixelFormat128bppPRGBAFloat)
+    {
+        if (!wbfact)
+            CoCreateInstance(CLSID_WICImagingFactory2, 0, CLSCTX_INPROC_SERVER,
+                __uuidof(IWICImagingFactory2), (void**)&wbfact);
+
+        int multi = 4;
+        if (from == GUID_WICPixelFormat128bppPRGBAFloat)
+            multi = 16;
+        if (from == GUID_WICPixelFormat64bppRGBAHalf)
+            multi = 8;
+        CComPtr<IWICBitmap> b;
+        wbfact->CreateBitmapFromMemory(wi, he, from, wi * multi, wi * he * multi, (BYTE*)f, &b);
+        if (!b)
+            return E_FAIL;
+
+
+        CComPtr<IWICFormatConverter> wf;
+        wbfact->CreateFormatConverter(&wf);
+
+        if (!wf)
+            return E_FAIL;
+        auto hr = wf->Initialize(b, GUID_WICPixelFormat32bppRGBA1010102, WICBitmapDitherTypeNone, 0, 0, WICBitmapPaletteTypeCustom);
+        if (FAILED(hr))
+            return E_FAIL;
+
+        CComPtr<IWICBitmap> wic;
+        wbfact->CreateBitmapFromSource(wf, WICBitmapCacheOnLoad, &wic);
+        if (!wic)
+            return E_FAIL;
+
+        WICRect wr = { 0,0,(INT)wi,(INT)he };
+        out.resize(wi * he);
+        hr = wic->CopyPixels(&wr, wi * 4, (UINT)out.size() * 4, (BYTE*)out.data());
+
+        return hr;
+    }
 
 };
 
@@ -989,7 +1065,7 @@ struct VectorStreamX2 : public IMFByteStream
     }
 
     HRESULT __stdcall  EndRead(
-        IMFAsyncResult* pResult,
+        IMFAsyncResult*,
         ULONG* pcbRead
     )
     {
@@ -1000,7 +1076,7 @@ struct VectorStreamX2 : public IMFByteStream
     }
 
     HRESULT __stdcall EndWrite(
-        IMFAsyncResult* pResult,
+        IMFAsyncResult* ,
         ULONG* pcbWritten
     )
     {
@@ -1114,7 +1190,7 @@ struct VectorStreamX2 : public IMFByteStream
             p = qwLength;
         return S_OK;
     }
-
+    
     HRESULT __stdcall  SetCurrentPosition(
         QWORD q
     )
@@ -1130,7 +1206,7 @@ struct VectorStreamX2 : public IMFByteStream
     HRESULT __stdcall Seek(
         MFBYTESTREAM_SEEK_ORIGIN dwOrigin,
         LONGLONG                 llSeekOffset,
-        DWORD                    dwSeekFlags,
+        DWORD                    ,
         QWORD* pqwCurrentPosition
     )
     {
@@ -1156,7 +1232,7 @@ struct VectorStreamX2 : public IMFByteStream
 
 
 
-int DesktopCapture(DESKTOPCAPTUREPARAMS& dp)
+inline int DesktopCapture(DESKTOPCAPTUREPARAMS& dp)
 {
     HRESULT hr = S_OK;
     struct AUDIOIN
@@ -1263,8 +1339,8 @@ int DesktopCapture(DESKTOPCAPTUREPARAMS& dp)
             CapturingFin1 = true;
         }
     };
-
-    EnumVistaMixers();
+    std::vector<VISTAMIXER> vistamixers;
+    EnumVistaMixers(vistamixers);
 
 
 
@@ -1400,11 +1476,23 @@ int DesktopCapture(DESKTOPCAPTUREPARAMS& dp)
 
 
         if (dp.VIDEO_ENCODING_FORMAT == MFVideoFormat_H265 || dp.VIDEO_ENCODING_FORMAT == MFVideoFormat_HEVC || dp.VIDEO_ENCODING_FORMAT == MFVideoFormat_HEVC_ES)
-            pMediaTypeOutVideo->SetUINT32(MF_MT_VIDEO_NOMINAL_RANGE, MFNominalRange_Wide);
+            pMediaTypeOutVideo->SetUINT32(MF_MT_VIDEO_NOMINAL_RANGE, MFNominalRange_Normal);
 
         if (dp.VIDEO_ENCODING_FORMAT == MFVideoFormat_VP80 || dp.VIDEO_ENCODING_FORMAT == MFVideoFormat_VP90)
-            pMediaTypeOutVideo->SetUINT32(MF_MT_VIDEO_NOMINAL_RANGE, MFNominalRange_Wide);
+            pMediaTypeOutVideo->SetUINT32(MF_MT_VIDEO_NOMINAL_RANGE, MFNominalRange_Normal);
 
+/*
+    MF_MT_FRAME_SIZE	1920 x 1080
+    MF_MT_AVG_BITRATE	185984000
+    MF_MT_MAJOR_TYPE	MFMediaType_Video
+    MF_MT_VIDEO_NOMINAL_RANGE	1
+    MF_MT_FRAME_RATE	30 x 1
+    MF_MT_PIXEL_ASPECT_RATIO	1 x 1
+    MF_MT_INTERLACE_MODE	2
+    MF_MT_SUBTYPE	MFVideoFormat_HEVC
+
+
+*/
         hr = pSinkWriter->AddStream(pMediaTypeOutVideo, &OutVideoStreamIndex);
         if (FAILED(hr)) return -5;
     }
@@ -1590,6 +1678,8 @@ int DesktopCapture(DESKTOPCAPTUREPARAMS& dp)
     MFSetAttributeRatio(pMediaTypeVideoIn, MF_MT_PIXEL_ASPECT_RATIO, 1, 1);
 
 
+
+
     // NV12 converter
     CComPtr<IMFTransform> VideoTransformMFT;
     bool NV12 = 0;
@@ -1632,10 +1722,25 @@ int DesktopCapture(DESKTOPCAPTUREPARAMS& dp)
     if (!NV12)
         pMediaTypeVideoIn->SetGUID(MF_MT_SUBTYPE, MFVideoFormat_RGB32);
 
+    if (cap.InHDR != DXGI_FORMAT_UNKNOWN)
+    {
+        // Force our Nvidia MFT encoder to load by calling first our fake guid
+        pMediaTypeVideoIn->SetGUID(MF_MT_SUBTYPE, MyFakeFmt);
+    }
+
     if (dp.HasVideo && !dp.Framer)
     {
         hr = pSinkWriter->SetInputMediaType(OutVideoStreamIndex, pMediaTypeVideoIn, NULL);
         if (FAILED(hr)) return -10;
+
+
+        if (cap.InHDR != DXGI_FORMAT_UNKNOWN)
+        {
+            // Now put the real value
+            pMediaTypeVideoIn->SetGUID(MF_MT_SUBTYPE, MFVideoFormat_RGB10);
+            hr = pSinkWriter->SetInputMediaType(OutVideoStreamIndex, pMediaTypeVideoIn, NULL);
+            if (FAILED(hr)) return -10;
+        }
 
         CComPtr<ICodecAPI> ca;
         hr = pSinkWriter->GetServiceForStream(OutVideoStreamIndex, GUID_NULL, __uuidof(ICodecAPI), (void**)&ca);
@@ -1701,12 +1806,16 @@ int DesktopCapture(DESKTOPCAPTUREPARAMS& dp)
     }
 
 
+    int multi = 4;
+    if (cap.InHDR != DXGI_FORMAT_UNKNOWN)
+        multi = 16;
+
     if (pSinkWriter)
         hr = pSinkWriter->BeginWriting();
     if (FAILED(hr)) return -13;
 
-    const LONG cbWidth = 4 * wi;
-    const DWORD VideoBufferSize = cbWidth * he;
+    const LONG cbWidth = multi * wi;
+    DWORD VideoBufferSize = cbWidth * he;
     CComPtr<IMFMediaBuffer> pVideoBuffer = NULL;
     CComPtr<IMFSample> pVideoSampleS = NULL;
 
@@ -1950,6 +2059,8 @@ int DesktopCapture(DESKTOPCAPTUREPARAMS& dp)
             if (FAILED(hr))
                 break;
 
+                
+
             // take a time stamp here
             // Get the current time point
             if (lDesktopResource && !cap.Get(lDesktopResource, dp.Cursor, dp.rx.right && dp.rx.bottom ? &dp.rx : 0))
@@ -1972,6 +2083,43 @@ int DesktopCapture(DESKTOPCAPTUREPARAMS& dp)
                 rtV += ThisDurV;
             }
 
+
+            std::vector<DWORD> hdrout;
+
+
+            if (cap.InHDR == DXGI_FORMAT_R32G32B32A32_FLOAT)
+            {
+                // This is a 16-bit 4xfloat sample
+                void* fld = cap.buf.data();
+                auto hr2 = cap.Convert(fld, wi, he, hdrout, GUID_WICPixelFormat128bppPRGBAFloat);
+                if (FAILED(hr2))
+                    break;
+                VideoBufferSize = (DWORD)(hdrout.size() * 4);
+            }
+            if (cap.InHDR == DXGI_FORMAT_R16G16B16A16_FLOAT)
+            {
+                // 64-bit float 16 bit each float, convert 
+                void* fld = cap.buf.data();
+                auto hr2 = cap.Convert(fld, wi, he, hdrout, GUID_WICPixelFormat64bppRGBAHalf);
+                if (FAILED(hr2))
+                    break;
+                VideoBufferSize = (DWORD)(hdrout.size() * 4);
+                // Up down
+
+                std::vector<DWORD> raw3;
+                raw3.resize(wi);
+                for (int y = 0; y < he / 2; y++)
+                {
+                    DWORD* d = hdrout.data() + y * wi;
+                    DWORD* d2 = hdrout.data() + (he - y - 1) * wi;
+                    memcpy(raw3.data(), d, wi * sizeof(DWORD));
+                    memcpy(d, d2, wi * sizeof(DWORD));
+                    memcpy(d2, raw3.data(), wi * sizeof(DWORD));
+                }
+            }
+
+
+
             if (!pVideoBuffer)
             {
                 hr = MFCreateMemoryBuffer(VideoBufferSize, &pVideoBuffer);
@@ -1982,9 +2130,16 @@ int DesktopCapture(DESKTOPCAPTUREPARAMS& dp)
             if (FAILED(hr))
                 break;
 
-            memcpy(pData, cap.buf.data(), min(cap.buf.size(),VideoBufferSize));
             if (dp.Framer)
-                hrf = dp.Framer(cap.buf.data(), min(cap.buf.size(),VideoBufferSize),dp.cb);
+                hrf = dp.Framer(cap.buf.data(), std::min(cap.buf.size(), (size_t)VideoBufferSize), dp.cb);
+            if (cap.InHDR != DXGI_FORMAT_UNKNOWN)
+            {
+                memcpy(pData, hdrout.data(), VideoBufferSize);
+            }
+            else
+            {
+                memcpy(pData, cap.buf.data(), std::min(cap.buf.size(), (size_t)VideoBufferSize));
+            }
 
             hr = pVideoBuffer->Unlock();
             if (FAILED(hr)) break;
@@ -2001,11 +2156,14 @@ int DesktopCapture(DESKTOPCAPTUREPARAMS& dp)
             }
             pVideoSample = pVideoSampleS;
 
+
             pVideoSample->RemoveAllBuffers();
             hr = pVideoSample->AddBuffer(pVideoBuffer);
             if (FAILED(hr)) break;
 
             cap.lDeskDupl->ReleaseFrame();
+
+
 
 
             hr = pVideoSample->SetSampleTime(rtV);
@@ -2019,7 +2177,7 @@ int DesktopCapture(DESKTOPCAPTUREPARAMS& dp)
             if (VideoTransformMFT)
             {
                 CComPtr<IMFSample> s2;
-                MFTrs(0, 0, 0, VideoTransformMFT, pVideoSample, &s2);
+                ::MFTrs(0, 0, 0, VideoTransformMFT, pVideoSample, &s2);
                 if (s2)
                     pVideoSample = s2;
             }
@@ -2121,4 +2279,3 @@ int DesktopCapture(DESKTOPCAPTUREPARAMS& dp)
         return -14;
 	return 0;
 }
-

@@ -35,5 +35,9 @@
 #include <d3d11.h>
 #include <shlobj.h>
 #include <propvarutil.h>
+#include <audioclient.h>
+#include <mmdeviceapi.h>
+#undef min
+#undef max
 
 
