@@ -3,9 +3,7 @@
 #include <mmdeviceapi.h>
 #undef min
 #undef max
-#ifdef TURBO_PLAY_SC
-#include "..\\ca\\vistamixers.hpp"
-#else
+
 
 
 // {1884E6DC-2AE3-4499-A3D7-1A27E3B2AC39}
@@ -15,6 +13,12 @@ inline static const GUID MyFakeFmt =
 // {7F478D2D-9EBF-4B9A-B2F3-83800263BB86}
 inline static const GUID MFVideoFormat_RGB10 =
 { 0x7f478d2d, 0x9ebf, 0x4b9a, { 0xb2, 0xf3, 0x83, 0x80, 0x2, 0x63, 0xbb, 0x86 } };
+
+
+
+#ifdef TURBO_PLAY_SC
+#include "..\\ca\\vistamixers.hpp"
+#else
 
 
 class AHANDLE
@@ -1339,8 +1343,12 @@ inline int DesktopCapture(DESKTOPCAPTUREPARAMS& dp)
             CapturingFin1 = true;
         }
     };
+#ifndef TURBO_PLAY_SC
     std::vector<VISTAMIXER> vistamixers;
     EnumVistaMixers(vistamixers);
+#else
+    EnumVistaMixers();
+#endif
 
 
 
