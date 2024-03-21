@@ -1426,6 +1426,8 @@ inline int DesktopCapture(DESKTOPCAPTUREPARAMS& dp)
             return -1;
         if (!cap.Prepare(dp.nOutput))
             return -2;
+        if (cap.InHDR)
+            dp.VIDEO_ENCODING_FORMAT = MFVideoFormat_HEVC;
         wi = cap.lOutputDuplDesc.ModeDesc.Width;
         he = cap.lOutputDuplDesc.ModeDesc.Height;
         if (dp.rx.right && dp.rx.bottom)
