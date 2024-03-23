@@ -1820,9 +1820,12 @@ inline int DesktopCapture(DESKTOPCAPTUREPARAMS& dp)
     if (cap.InHDR != DXGI_FORMAT_UNKNOWN)
         multi = 16;
 
-    if (pSinkWriter)
-        hr = pSinkWriter->BeginWriting();
-    if (FAILED(hr)) return -13;
+    if (!dp.Framer)
+    {
+        if (pSinkWriter)
+            hr = pSinkWriter->BeginWriting();
+        if (FAILED(hr)) return -13;
+    }
 
     const LONG cbWidth = multi * wi;
     DWORD VideoBufferSize = cbWidth * he;
@@ -2140,8 +2143,6 @@ inline int DesktopCapture(DESKTOPCAPTUREPARAMS& dp)
             if (FAILED(hr))
                 break;
 
-            if (dp.Framer)
-                hrf = dp.Framer(cap.buf.data(), std::min(cap.buf.size(), (size_t)VideoBufferSize), dp.cb);
             if (cap.InHDR != DXGI_FORMAT_UNKNOWN)
             {
                 memcpy(pData, hdrout.data(), VideoBufferSize);
@@ -2150,6 +2151,8 @@ inline int DesktopCapture(DESKTOPCAPTUREPARAMS& dp)
             {
                 memcpy(pData, cap.buf.data(), std::min(cap.buf.size(), (size_t)VideoBufferSize));
             }
+            if (dp.Framer)
+                hrf = dp.Framer(pData, std::min(cap.buf.size(), (size_t)VideoBufferSize), dp.cb);
 
             hr = pVideoBuffer->Unlock();
             if (FAILED(hr)) break;
