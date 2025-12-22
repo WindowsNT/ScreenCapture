@@ -629,6 +629,7 @@ class CAPTURE
 public:
 
     DXGI_FORMAT InHDR = DXGI_FORMAT_UNKNOWN;
+    int ConvertHDR = 2; // 0 no convert, 1 convert, 1 convert and go updown
     HRESULT CreateDirect3DDevice(IDXGIAdapter1* g)
     {
         HRESULT hr = S_OK;
@@ -974,7 +975,7 @@ struct DESKTOPCAPTUREPARAMS
     std::wstring f;
     void* cb = 0;
     std::function<HRESULT(const BYTE* d, size_t sz,void* cb)> Streamer;
-    std::function<HRESULT(const BYTE* d, size_t sz,void* cb)> Framer;
+    std::function<HRESULT(DXGI_FORMAT dxgi,int wi,int he,const BYTE* d, size_t sz,void* cb)> Framer;
     std::function<void(IMFAttributes* a)> PrepareAttributes;
     int fps = 25;
     int NumThreads = 0;
@@ -2109,7 +2110,7 @@ inline int DesktopCapture(DESKTOPCAPTUREPARAMS& dp)
                     break;
                 VideoBufferSize = (DWORD)(hdrout.size() * 4);
             }
-            if (cap.InHDR == DXGI_FORMAT_R16G16B16A16_FLOAT)
+            if (cap.InHDR == DXGI_FORMAT_R16G16B16A16_FLOAT && cap.ConvertHDR)
             {
                 // 64-bit float 16 bit each float, convert 
                 void* fld = cap.buf.data();
@@ -2119,15 +2120,18 @@ inline int DesktopCapture(DESKTOPCAPTUREPARAMS& dp)
                 VideoBufferSize = (DWORD)(hdrout.size() * 4);
                 // Up down
 
-                std::vector<DWORD> raw3;
-                raw3.resize(wi);
-                for (int y = 0; y < he / 2; y++)
+                if (cap.ConvertHDR == 2)
                 {
-                    DWORD* d = hdrout.data() + y * wi;
-                    DWORD* d2 = hdrout.data() + (he - y - 1) * wi;
-                    memcpy(raw3.data(), d, wi * sizeof(DWORD));
-                    memcpy(d, d2, wi * sizeof(DWORD));
-                    memcpy(d2, raw3.data(), wi * sizeof(DWORD));
+                    std::vector<DWORD> raw3;
+                    raw3.resize(wi);
+                    for (int y = 0; y < he / 2; y++)
+                    {
+                        DWORD* d = hdrout.data() + y * wi;
+                        DWORD* d2 = hdrout.data() + (he - y - 1) * wi;
+                        memcpy(raw3.data(), d, wi * sizeof(DWORD));
+                        memcpy(d, d2, wi * sizeof(DWORD));
+                        memcpy(d2, raw3.data(), wi * sizeof(DWORD));
+                    }
                 }
             }
 
@@ -2152,7 +2156,7 @@ inline int DesktopCapture(DESKTOPCAPTUREPARAMS& dp)
                 memcpy(pData, cap.buf.data(), std::min(cap.buf.size(), (size_t)VideoBufferSize));
             }
             if (dp.Framer)
-                hrf = dp.Framer(pData, std::min(cap.buf.size(), (size_t)VideoBufferSize), dp.cb);
+                hrf = dp.Framer(cap.InHDR,wi,he,pData, std::min(cap.buf.size(), (size_t)VideoBufferSize), dp.cb);
 
             hr = pVideoBuffer->Unlock();
             if (FAILED(hr)) break;
